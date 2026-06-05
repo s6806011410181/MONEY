@@ -229,6 +229,71 @@
             border-radius: 10px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
+
+        .view-all-btn {
+            background: #6366f1;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95em;
+            transition: background 0.2s;
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        .view-all-btn:hover {
+            background: #4f46e5;
+        }
+
+        .all-records-modal {
+            display: none;
+            position: fixed;
+            z-index: 101;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .all-records-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 700px;
+            max-height: 85vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .all-records-content table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .all-records-content th {
+            background: #f3f4f6;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            border-bottom: 2px solid #ddd;
+            font-size: 0.9em;
+        }
+
+        .all-records-content td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .all-records-content tr:hover {
+            background: #f9fafb;
+        }
     </style>
 </head>
 
@@ -250,6 +315,17 @@
         <div class="history-section">
             <div class="history-header">ประวัติการโอนล่าสุด</div>
             <div id="transfer-list">
+                <p style="text-align:center; color: gray;">กำลังโหลดข้อมูล...</p>
+            </div>
+            <button class="view-all-btn" onclick="openAllRecordsModal()">📊 ดูข้อมูลทั้งหมด</button>
+        </div>
+    </div>
+
+    <div id="allRecordsModal" class="all-records-modal">
+        <div class="all-records-content">
+            <span class="close-btn" onclick="closeAllRecordsModal()">&times;</span>
+            <h2 style="text-align:center; margin-top: 0; color:#333;">ข้อมูลการโอนทั้งหมด</h2>
+            <div id="allRecordsTable">
                 <p style="text-align:center; color: gray;">กำลังโหลดข้อมูล...</p>
             </div>
         </div>
@@ -437,11 +513,101 @@
                 .catch(e => { console.error("Load Data Error:", e); if (balanceEl) balanceEl.innerText = "Error"; });
         }
 
+        function openAllRecordsModal() {
+            const modal = document.getElementById('allRecordsModal');
+            modal.style.display = 'flex';
+            loadAllRecords();
+        }
+
+        function closeAllRecordsModal() {
+            document.getElementById('allRecordsModal').style.display = 'none';
+        }
+
+        function loadAllRecords() {
+            const tableEl = document.getElementById('allRecordsTable');
+            tableEl.innerHTML = '<p style="text-align:center; color: gray;">กำลังโหลดข้อมูล...</p>';
+
+            fetch(GAS_URL + "?action=getAll")
+                .then(res => res.json())
+                .then(data => {
+                    tableEl.innerHTML = "";
+                    if (data && data.length > 0) {
+                        let tableHTML = `
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>วันที่</th>
+                                        <th>จำนวนเงิน</th>
+                                        <th>สถานะ</th>
+                                        <th>ยอดคงเหลือ</th>
+                                        <th>สลิป</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+
+                        data.forEach(item => {
+                            let displayDate = item.date;
+
+                            if (displayDate && (displayDate.toString().includes('T') || displayDate.toString().includes('Z'))) {
+                                let dateObj = new Date(displayDate);
+                                displayDate = dateObj.toLocaleDateString('th-TH', {
+                                    year: 'numeric',
+                                    month: '2-digit',
+                                    day: '2-digit'
+                                });
+                            }
+
+                            let displayAmount = "";
+                            let amountColor = "#333";
+
+                            if (item.status === "เพิ่มดอกรายสัปดาห์" || item.amount === "-") {
+                                displayAmount = "180 บาท";
+                                amountColor = "#e53e3e";
+                            } else {
+                                const val = parseFloat(item.amount);
+                                if (!isNaN(val)) {
+                                    displayAmount = "+" + val.toLocaleString() + " บาท";
+                                    amountColor = "#38a169";
+                                } else {
+                                    displayAmount = item.amount;
+                                }
+                            }
+
+                            const displayBalance = typeof item.balance === 'number' ? item.balance.toLocaleString() : item.balance;
+                            const slipLink = (item.slip && item.slip !== "-") ? `<a href="${item.slip}" target="_blank" style="color: #2563eb; text-decoration: none;">📄</a>` : "-";
+
+                            tableHTML += `
+                                <tr>
+                                    <td>${displayDate}</td>
+                                    <td style="color: ${amountColor}; font-weight: bold;">${displayAmount}</td>
+                                    <td>${item.status || "ยืนยันแล้ว"}</td>
+                                    <td>${displayBalance}</td>
+                                    <td>${slipLink}</td>
+                                </tr>
+                            `;
+                        });
+
+                        tableHTML += `
+                                </tbody>
+                            </table>
+                        `;
+                        tableEl.insertAdjacentHTML('beforeend', tableHTML);
+                    } else {
+                        tableEl.innerHTML = '<p style="text-align:center;">ไม่มีรายการใดๆ</p>';
+                    }
+                })
+                .catch(e => { console.error("Load All Records Error:", e); tableEl.innerHTML = '<p style="text-align:center; color: red;">เกิดข้อผิดพลาด</p>'; });
+        }
+
         window.onload = function () {
             loadData();
         };
 
-        window.onclick = function (event) { if (event.target == document.getElementById('paymentModal')) { closeModal(); } }
+        window.onclick = function (event) { 
+            if (event.target == document.getElementById('paymentModal')) { closeModal(); }
+            if (event.target == document.getElementById('allRecordsModal')) { closeAllRecordsModal(); }
+        }
     </script>
 </body>
 
